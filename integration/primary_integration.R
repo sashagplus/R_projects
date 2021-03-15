@@ -8,58 +8,62 @@ library(rpart.plot)
 rm(list=ls())
 
 
-rnaseq_filename=str_c("//Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
-                             "Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/rnaseq/primary_models/",
-                             "20210314_rnaseq_Bup_7d_modeling_predictions.csv")
+rnaseq_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
+                      "Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/rnaseq/primary_models/",
+                      "20210315_rnaseq_Bup_7d_premodeling_data.csv")
 
 rnaseq=read.csv(rnaseq_filename)
 
 spines_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
-                        "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
-                        "04_Differentiation_Experiments/Data Science/Spines_modeling/",
-                        "20210314_spines_Bup_7d_maxDF_modeling_predictions.csv")
+                      "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
+                      "04_Differentiation_Experiments/Data Science/Spines_modeling/",
+                      "20210315_spines_Bup_7d_maxDF_premodeling_data.csv")
 
 spines=read.csv(spines_filename)
 
 coloc_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
-                      "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
-                      "04_Differentiation_Experiments/Data Science/Colocolization_modeling/",
-                      "20210314_coloc_Bup_7d_maxDF_modeling_predictions.csv")
+                     "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
+                     "04_Differentiation_Experiments/Data Science/Colocolization_modeling/",
+                     "20210315_coloc_Bup_7d_maxDF_premodeling_data.csv")
 
 coloc=read.csv(coloc_filename)
 
 
-coloc %<>% select(FIELD_NO, Line, BUP.Responder, response, mean_prediction)
-rnaseq %<>% select(Line, response, mean_prediction)
-spines %<>% select(Line, BUP.Responder, response, mean_prediction)
+# coloc %<>% select(FIELD_NO, Line, BUP.Responder, response, mean_prediction)
+# rnaseq %<>% select(Line, response, mean_prediction)
+# spines %<>% select(Line, BUP.Responder, response, mean_prediction)
+# 
+# rnaseq %<>% mutate(Line=as.numeric(gsub('L', '', Line)))
 
-rnaseq %<>% mutate(Line=as.numeric(gsub('L', '', Line)))
+# rname=data.frame(rnum=1:nrow(rnaseq), BUP=rnaseq$group)
+# cname=data.frame(cnum=1:nrow(coloc), BUP=coloc$BUP.Responder)
+# sname=data.frame(snum=1:nrow(spines), BUP=spines$BUP.Responder)
+
+responsive=merge(merge(rnaseq %>% filter(group==1) %>% select(-group),
+                 coloc %>% filter(BUP.Responder==1) %>% select(-BUP.Responder)),
+                 spines %>% filter(BUP.Responder==1) %>% select(-BUP.Responder))
+
+responsive %<>% mutate(BUP=1) %>% select(BUP, everything())
 
 
-responsive=expand.grid(rnaseq=rnaseq %>% filter(response==1) %>% pull(mean_prediction),
-                      coloc=coloc %>% filter(BUP.Responder=="R") %>% pull(mean_prediction), 
-                      spines=spines %>% filter(BUP.Responder=="R") %>% pull(mean_prediction),
-                      BUP="R")
+nonresponsive=merge(merge(rnaseq %>% filter(group==0) %>% select(-group),
+                       coloc %>% filter(BUP.Responder==0) %>% select(-BUP.Responder)),
+                 spines %>% filter(BUP.Responder==0) %>% select(-BUP.Responder))
 
-nonresponsive=expand.grid(rnaseq=rnaseq %>% filter(response==0) %>% pull(mean_prediction),
-                       coloc=coloc %>% filter(BUP.Responder=="NR") %>% pull(mean_prediction), 
-                       spines=spines %>% filter(BUP.Responder=="NR") %>% pull(mean_prediction),
-                       BUP="NR")
+nonresponsive %<>% mutate(BUP=0) %>% select(BUP, everything())
+
 
 
 simulated=bind_rows(responsive, nonresponsive)
-simulated %<>% select(BUP, everything())
 
-simulated.labels=simulated$BUP
-simulated %<>% mutate(BUP=ifelse(BUP=="NR", 0, 1))
 
-simulated$BUP = sample(simulated$BUP)
+#simulated$BUP = sample(simulated$BUP)
 accuracies.xgb=data.frame()
 #predictions=data.frame(response=dndrt_data$BUP.Responder)
 for(i in 1:10)
 {  
-  train=c(sample(which(simulated$BUP==0), length(which(simulated$BUP==0))*0.8) ,
-          sample(which(simulated$BUP==1), length(which(simulated$BUP==1))*0.8) )
+  train=c(sample(which(simulated$BUP==0), length(which(simulated$BUP==0))*0.5) ,
+          sample(which(simulated$BUP==1), length(which(simulated$BUP==1))*0.5) )
   test=c(1:nrow(simulated))[-train]
   
   # train=c(1:nrow(dndrt_data))[-1]
@@ -97,4 +101,4 @@ for(i in 1:10)
                                        test=cm.test$overall["Accuracy"]))
 }
   
-
+print(mean(accuracies.xgb$test))
