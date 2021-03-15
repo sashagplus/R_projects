@@ -7,98 +7,129 @@ library(rpart.plot)
 
 rm(list=ls())
 
+#read data
+# rnaseq_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
+#                       "Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/rnaseq/primary_models/",
+#                       "20210315_rnaseq_Bup_7d_premodeling_data.csv")
+# 
+# rnaseq=read.csv(rnaseq_filename)
+# 
+# spines_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
+#                       "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
+#                       "04_Differentiation_Experiments/Data Science/Spines_modeling/",
+#                       "20210315_spines_Bup_7d_maxDF_premodeling_data.csv")
+# 
+# spines=read.csv(spines_filename)
+# spines %<>% separate(name, into=c("DF", "Line", "Well", "Days", "fn_Well", "fn_Field"))
+# 
+# 
+# coloc_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
+#                      "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
+#                      "04_Differentiation_Experiments/Data Science/Colocolization_modeling/",
+#                      "20210315_coloc_Bup_7d_maxDF_premodeling_data.csv")
+# 
+# coloc=read.csv(coloc_filename)
+# 
+# 
+# # coloc %<>% select(FIELD_NO, Line, BUP.Responder, response, mean_prediction)
+# # rnaseq %<>% select(Line, response, mean_prediction)
+# # spines %<>% select(Line, BUP.Responder, response, mean_prediction)
+# # 
+#  rnaseq %<>% mutate(Line=as.numeric(gsub('L', '', Line)))
+# 
+# alllines=full_join(rnaseq %>% select(Line=Line, BUP.Responder=group, RNASeq=Line) %>% distinct ,
+#                     full_join(spines %>% select(Line=Line, spines=Line, BUP.Responder) %>% distinct %>% mutate(Line=as.numeric(Line)), 
+#                               coloc %>% select(BUP.Responder, Line=Line, coloc=Line) %>% distinct , 
+#                               by=c("Line", "BUP.Responder")),
+#                     by=c("Line", "BUP.Responder"))
+#  
+# alllines %<>% left_join(rnaseq, by=c("Line", "BUP.Responder"="group"))  
+#  
+# alllines %<>% left_join(spines %>% select(-DF, -Well, -Days, -fn_Field, -fn_Well) %>% mutate(Line=as.numeric(Line)), 
+#                         by=c("Line", "BUP.Responder")) 
+# 
+# alllines %<>% left_join(coloc %>% select(-FIELD_NO, -DF) , 
+#                         by=c("Line", "BUP.Responder")) 
 
-rnaseq_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
+
+rnaseq_pred_filename=str_c("//Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
                       "Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/rnaseq/primary_models/",
-                      "20210315_rnaseq_Bup_7d_premodeling_data.csv")
+                      "20210314_rnaseq_Bup_7d_modeling_predictions.csv")
 
-rnaseq=read.csv(rnaseq_filename)
+rnaseq_pred=read.csv(rnaseq_pred_filename)
 
-spines_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
+spines_pred_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
                       "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
                       "04_Differentiation_Experiments/Data Science/Spines_modeling/",
-                      "20210315_spines_Bup_7d_maxDF_premodeling_data.csv")
+                      "20210314_spines_Bup_7d_maxDF_modeling_predictions.csv")
 
-spines=read.csv(spines_filename)
+spines_pred=read.csv(spines_pred_filename)
 
-coloc_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
+coloc_pred_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
                      "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
                      "04_Differentiation_Experiments/Data Science/Colocolization_modeling/",
-                     "20210315_coloc_Bup_7d_maxDF_premodeling_data.csv")
+                     "20210314_coloc_Bup_7d_maxDF_modeling_predictions.csv")
 
-coloc=read.csv(coloc_filename)
+coloc_pred=read.csv(coloc_pred_filename)
 
 
-# coloc %<>% select(FIELD_NO, Line, BUP.Responder, response, mean_prediction)
-# rnaseq %<>% select(Line, response, mean_prediction)
-# spines %<>% select(Line, BUP.Responder, response, mean_prediction)
+coloc_pred %<>% select(FIELD_NO, Line, BUP.Responder, response, mean_prediction)
+rnaseq_pred %<>% select(Line, response, mean_prediction)
+spines_pred %<>% select(Line, BUP.Responder, response, mean_prediction)
+
+rnaseq_pred %<>% mutate(Line=as.numeric(gsub('L', '', Line)))
 # 
-# rnaseq %<>% mutate(Line=as.numeric(gsub('L', '', Line)))
-
-# rname=data.frame(rnum=1:nrow(rnaseq), BUP=rnaseq$group)
-# cname=data.frame(cnum=1:nrow(coloc), BUP=coloc$BUP.Responder)
-# sname=data.frame(snum=1:nrow(spines), BUP=spines$BUP.Responder)
-
-responsive=merge(merge(rnaseq %>% filter(group==1) %>% select(-group),
-                 coloc %>% filter(BUP.Responder==1) %>% select(-BUP.Responder)),
-                 spines %>% filter(BUP.Responder==1) %>% select(-BUP.Responder))
-
-responsive %<>% mutate(BUP=1) %>% select(BUP, everything())
-
-
-nonresponsive=merge(merge(rnaseq %>% filter(group==0) %>% select(-group),
-                       coloc %>% filter(BUP.Responder==0) %>% select(-BUP.Responder)),
-                 spines %>% filter(BUP.Responder==0) %>% select(-BUP.Responder))
-
-nonresponsive %<>% mutate(BUP=0) %>% select(BUP, everything())
+# 
+# alllines %<>% select(Line, BUP.Responder, RNASeq, spines, coloc)
+# 
+# 
+# 
+# 
+# alllines %<>% left_join(rnaseq_pred %>% select(rnaseq_pred=mean_prediction, everything()), by=c("Line", BUP.Responder="response" ))
+# 
+# alllines %<>% left_join(spines_pred %>% select(spines_pred=mean_prediction, Line, response), by=c("Line", BUP.Responder="response" ))
+# alllines %<>% left_join(coloc_pred %>% select(coloc_pred=mean_prediction, Line, response), by=c("Line", BUP.Responder="response" ))
+alllines=full_join(rnaseq_pred %>% select(Line=Line, response=response, RNASeq=mean_prediction) %>% distinct ,
+                   full_join(spines_pred %>% select(Line=Line, spines=mean_prediction, response) %>% distinct %>% mutate(Line=as.numeric(Line)), 
+                             coloc_pred %>% select(response, Line=Line, coloc=mean_prediction) %>% distinct , 
+                             by=c("Line", "response")),
+                   by=c("Line", "response"))
 
 
 
-simulated=bind_rows(responsive, nonresponsive)
+
+alllines %<>% mutate(RNASeq = round(RNASeq))
+alllines %<>% mutate(spines = round(spines))
+alllines %<>% mutate(coloc = round(coloc))
+
+alllines %<>% rowwise %<>% mutate(overall_pred=ifelse(all(!is.na(.data$RNASeq), !is.na(.data$spines), !is.na(.data$coloc)), 
+                                                      round((.data$RNASeq+ .data$spines+ .data$coloc)/3), 
+                                         ifelse(!is.na(.data$RNASeq),.data$RNASeq, .data$coloc )))
+
+print("why?")
 
 
-#simulated$BUP = sample(simulated$BUP)
-accuracies.xgb=data.frame()
-#predictions=data.frame(response=dndrt_data$BUP.Responder)
-for(i in 1:10)
-{  
-  train=c(sample(which(simulated$BUP==0), length(which(simulated$BUP==0))*0.5) ,
-          sample(which(simulated$BUP==1), length(which(simulated$BUP==1))*0.5) )
-  test=c(1:nrow(simulated))[-train]
+accuracies=data.frame()
+
+#for(i in 1:nrow(coloc))
+for(i in 1:20)
+{ 
+  train=c(sample(which(alllines$response==0), length(which(alllines$response==0))*0.5) ,
+          sample(which(alllines$response==1), length(which(alllines$response==1))*0.5) )
+  test=c(1:nrow(alllines))[-train]
   
-  # train=c(1:nrow(dndrt_data))[-1]
-  # test=c(i)
+  cm.train <- confusionMatrix(factor(alllines$response[train]), 
+                              factor(alllines$overall_pred[train]))
   
-  xgb.model <- xgboost(data = as.matrix(simulated[train,-1]),
-                       label = simulated[train,1],
-                       max.depth = 2, #prms$max.depth[p],
-                       eta = 0.2, #prms$eta[p],
-                       nthread = 5, #prms$nthreads[p],
-                       nrounds = 30, #prms$nrounds[p] , #Why 63? xgb.cv showed several times for it to be best fit
-                       eval_metric = "error",
-                       objective = "binary:logistic",
-                       verbose = 0)
+  cm.test <- confusionMatrix(factor(alllines$response[test]), 
+                              factor(alllines$overall_pred[test]))
   
-  #predicted <- predict(xgb.model, as.matrix(simulated[,-1]));
-  
-  #pp=data.frame(predicted)
-  #colnames(pp)=str_c("prediction_", ncol(predictions))
-  
-  #predictions %<>% bind_cols(pp)
-  
-  predicted <- round(predict(xgb.model, as.matrix(simulated[,-1])));
-  
-  cm.train <- confusionMatrix(factor(simulated$BUP[train], levels = unique(simulated$BUP)), 
-                              factor(predicted[train],levels = unique(simulated$BUP)))
-  #print("Train")
-  #print(cm.train$overall)
-  
-  cm.test <- confusionMatrix(factor(simulated$BUP[test], levels = unique(simulated$BUP)),
-                                        factor(predicted[test], levels = unique(simulated$BUP)))
-  
-  accuracies.xgb %<>% bind_rows(data.frame(nn=i,
+  accuracies %<>% bind_rows(data.frame(nn=i,
                                        train=cm.train$overall["Accuracy"], 
                                        test=cm.test$overall["Accuracy"]))
+
+
+
 }
-  
-print(mean(accuracies.xgb$test))
+
+
