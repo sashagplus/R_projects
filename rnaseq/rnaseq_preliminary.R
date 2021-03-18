@@ -6,7 +6,7 @@ library(tidyr)
 library("rpart")
 library(rpart.plot)
 
-
+rm(list=)
 
 data_folder=stringr::str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/01_Protocol_Development/01_06_RNA-seq/Analysis/Analysis full/")
 
@@ -40,18 +40,18 @@ bup_exp %<>% gather(key="lname", value="cnts", -ensemblID, -gene_ID, -data)
 
 bup_exp %<>% left_join(sample_profiles %>% select(lname, sample, treatment, group, nname),
                        by=c("lname"))
-bup_exp %<>% group_by(ensemblID, gene_ID, data, sample, treatment, group, nname) %<>% 
+bup_exp %<>% group_by(ensemblID, gene_ID, data, sample, treatment, group, nname) %<>%
   summarise(med_cnt=median(cnts), .groups = "keep")
 
 bup_exp %<>% ungroup() %<>% select(-nname) %<>% spread(key=treatment, value = med_cnt) %<>% as.data.frame()
 
-bup_exp %<>%rowwise() %<>% mutate(fc=ifelse(Vehicle==0, 
-                                            ifelse(Bup==0, 1, Bup), 
+bup_exp %<>%rowwise() %<>% mutate(fc=ifelse(Vehicle==0,
+                                            ifelse(Bup==0, 1, Bup),
                                             Bup/Vehicle))
 
 bup_exp %<>% mutate(logfc=log(fc,2))
 
-cut_bup_exp = bup_exp%>% filter(logfc<=log(0.7,2) | logfc >=log(1.3,2)) 
+cut_bup_exp = bup_exp%>% filter(logfc<=log(0.7,2) | logfc >=log(1.3,2))
 
 
 mat=bup_exp %>% ungroup %>%select(ensemblID, sample, group, logfc) %>% spread (key=ensemblID, value=logfc)
@@ -64,6 +64,7 @@ mat %<>%
 
 mat %<>% as.data.frame() %<>% tibble::column_to_rownames("sample")
 
+
 ttests=mat %>%
   summarise_each(funs(t.test(.[group == "Non-Res"], .[group == "Responders"])$p.value), vars = -group)
 
@@ -75,37 +76,137 @@ colnames(ttests)[2]="pval"
 # submat=mat[,names(which(nas==0))] %>% as.data.frame()
 # for ( i in 3:ncol(submat)) {submat[is.infinite(submat[,i]),i]=min(submat[is.finite(submat[,i]), i])*1.5}
 
-sig_features=ttests %>% filter(pval<=0.005) %>% pull(ensembleID)
+sig_features=ttests %>% filter(pval<=0.01) %>% pull(ensembleID)
+#mat %<>% select(group, !!sig_features)
 
-genes=bup_exp %>% select(ensemblID, gene_ID, data) %>% distinct
-genes %<>% mutate(labels=stringr::str_c(ensemblID, "  ", gene_ID, " (", data, ")"))
+# genes=bup_exp %>% select(ensemblID, gene_ID, data) %>% distinct
+# genes %<>% mutate(labels=stringr::str_c(ensemblID, "  ", gene_ID, " (", data, ")"))
+# 
+# pdf("boxplots.pdf")
+# for(i in sig_features) {
+#   ll= genes %>% filter(ensemblID==i) %>% pull(labels)
+#   boxplot(mat[,i]~mat$group, ylab = ll)
+#
+# }
+# dev.off()
 
-pdf("boxplots.pdf")
-for(i in sig_features) {
-  ll= genes %>% filter(ensemblID==i) %>% pull(labels)
-  boxplot(mat[,i]~mat$group, ylab = ll)
-  
-}
-dev.off()
+output_filename_processed=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
+                              "Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/rnaseq/primary_models/",
+                              "20210315_rnaseq_Bup_7d_processed.Rdata")
 
+ save(mat, file=output_filename_processed)
 
+#load(output_filename_processed)
 
+#break()
+ 
+library(caret)
+library(xgboost)
 # balance partition
 mat.group=mat$group
 resp_partition = split(sample(which(mat.group=="Responders")),1:8)
 nonresp_partition = split(sample(which(mat.group=="Non-Res")),1:8)
 
 mat %<>% mutate(group=ifelse(group=="Responders", 1, 0))
-accs=c()
+
+mat1=mat
+
+
+output_filename_predata=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
+                              "Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/rnaseq/primary_models/",
+                              "20210315_rnaseq_Bup_7d_premodeling_data.csv")
+
+write.csv(mat %>% tibble::rownames_to_column("Line"), output_filename_predata,
+          quote = TRUE,
+          row.names = FALSE)
+
+
+
+#set.seed(0)
+#set.seed(NULL)
+# prms=merge(seq(1,10,1), seq(0.1,0.9, 0.1))
+# colnames(prms)=c("max.depth", "eta")
+# prms %<>% full_join(data.frame(nthreads=c(1:10)), by=as.character())
+# prms %<>% full_join(data.frame(nrounds=c(1:30)), by=as.character())
+# prms$accuracy.train=NA
+# prms$accuracy.test=NA
+
+#mean.accuracies.prms.xgb=data.frame()
+# for(p in 21091:nrow(prms))
+# {
+#if(p%%1000==0) print(p)
+
+accuracies.xgb=data.frame()
+predictions=data.frame(Line=row.names(mat) ,response=mat$group)
+
 for(i in 1:8)
-{
+{  
+  
   exclude_samples=c(resp_partition[[i]], nonresp_partition[[i]])
   
-  mylogit <- glm(group ~ ., data = mat[-exclude_samples, c("group",sig_features)], family = "binomial")
+  xgb.model <- xgboost(data = as.matrix(mat[-exclude_samples,-1]),
+                       label = mat[-exclude_samples,1],
+                       max.depth = 2, #prms$max.depth[p],
+                       eta = 0.2, #prms$eta[p],
+                       nthread = 5, #prms$nthreads[p],
+                       nrounds = 30, #prms$nrounds[p] , #Why 63? xgb.cv showed several times for it to be best fit
+                       eval_metric = "error",
+                       objective = "binary:logistic",
+                       verbose = 0)
   
-  predicted=round(predict(mylogit, newdata = mat[exclude_samples,], type = "response"))
-  accs=c(accs, length(which(mat$group[exclude_samples]==predicted))/length(exclude_samples))
+  predicted <- predict(xgb.model, as.matrix(mat[,-1]));
+  
+  pp=data.frame(predicted)
+  colnames(pp)=str_c("prediction_", ncol(predictions))
+  
+  predictions %<>% bind_cols(pp)
+  
+  predicted <- round(predict(xgb.model, as.matrix(mat[,-1])));
+  
+  cm.train <- confusionMatrix(factor(mat$group[-exclude_samples], levels = unique(mat$group)), 
+                              factor(predicted[-exclude_samples],levels = unique(mat$group)))
+  #print("Train")
+  #print(cm.train$overall)
+  
+  cm.test <- cm.test <- confusionMatrix(factor(mat$group[exclude_samples], levels = unique(mat$group)),
+                                        factor(predicted[exclude_samples], levels = unique(mat$group)))
+  
+  
+  #  cm.test <- ifelse(predicted[test]==dndrt_data$BUP.Responder[test], 100, 0);
+  
+  accuracies.xgb %<>% bind_rows(data.frame(nn=i,
+                                           train=cm.train$overall["Accuracy"], 
+                                           test=cm.test$overall["Accuracy"],
+                                           test.sensetivity=cm.test$byClass[["Sensitivity"]],
+                                           test.specificity=cm.test$byClass[["Specificity"]]))
+                                           
+  # accuracies.xgb %<>% bind_rows(data.frame(nn=i,
+  #                                          train=cm.train$overall["Accuracy"], 
+  #                                          test=cm.test))
 }
+#prms$accuracy.train[p]=mean(accuracies.xgb$train)
+#prms$accuracy.test[p]=mean(accuracies.xgb$test)
+#}
+
+print(str_c("mean accuracy:",  mean(accuracies.xgb$test, na.rm = T)))
+print(str_c("mean sensetivity:",  mean(accuracies.xgb$test.sensetivity, na.rm = T)))
+print(str_c("mean specificity:",  mean(accuracies.xgb$test.specificity, na.rm = T)))
 
 
-submat = mat[,c("group",sig_features)]
+
+#predictions =bind_cols(dndrt_data_info, predictions)
+
+# predictions %<>% separate(name, into=c("DF", "Line", "Well", "Day", "Well_filename", "Field_filename")) %<>% 
+#   unite("filename", Well_filename, Field_filename, sep = "_")
+
+# predictions %<>% group_by_at(vars(!starts_with("prediction_"))) %>% 
+#   rowwise() %>%
+#   mutate(mean_prediction=mean(c_across( starts_with("prediction_"))))
+# 
+# output_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
+#                       "Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/rnaseq/primary_models/",
+#                       "20210314_rnaseq_Bup_7d_modeling_predictions.csv")
+# 
+# write.csv(predictions, output_filename,
+#           quote = TRUE,
+#           row.names = FALSE)
