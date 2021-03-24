@@ -95,7 +95,7 @@ output_filename_processed=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropb
                               "20210315_rnaseq_Bup_7d_processed.Rdata")
 
  save(mat, file=output_filename_processed)
-
+break()
 #load(output_filename_processed)
 
 #break()
@@ -138,6 +138,7 @@ write.csv(mat %>% tibble::rownames_to_column("Line"), output_filename_predata,
 
 accuracies.xgb=data.frame()
 predictions=data.frame(Line=row.names(mat) ,response=mat$group)
+models=list()
 
 for(i in 1:8)
 {  
@@ -154,14 +155,14 @@ for(i in 1:8)
                        objective = "binary:logistic",
                        verbose = 0)
   
-  predicted <- predict(xgb.model, as.matrix(mat[,-1]));
+  #predicted <- predict(xgb.model, as.matrix(mat[,-1]));
+  predicted <- round(predict(xgb.model, as.matrix(mat[,-1])));
   
   pp=data.frame(predicted)
   colnames(pp)=str_c("prediction_", ncol(predictions))
   
   predictions %<>% bind_cols(pp)
   
-  predicted <- round(predict(xgb.model, as.matrix(mat[,-1])));
   
   cm.train <- confusionMatrix(factor(mat$group[-exclude_samples], levels = unique(mat$group)), 
                               factor(predicted[-exclude_samples],levels = unique(mat$group)))
