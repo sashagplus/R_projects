@@ -17,7 +17,10 @@ set.seed(1)
 #    b. mark feature names with origin
 #    c. remove date and crcid, since non informative
 read_csv=function(filename, 
-                  filepath="C:/Users/owner/Dropbox/Genetika+ExerciseConfidentialFile/")
+                  filepath=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
+                                "01_Protocol_Development/01_10_Data_Science/DataforPatientHistory/DepressionDataNIH/",
+                                "StarD/STAR_DClinicalData/ASCII Files raw data/"),
+                  withDate=FALSE)
 {
      
      readdata = read.csv(file = stringr::str_c(filepath, filename),
@@ -26,12 +29,17 @@ read_csv=function(filename,
      
      names(readdata) %<>% tolower;
      
-     readdata %<>% dplyr::select(-dplyr::matches("date"),
-                                 -dplyr::matches("crcid"))
+     readdata %<>% dplyr::select(-dplyr::matches("crcid"))
+     if(!withDate) 
+     {
+         readdata %<>% dplyr::select(-dplyr::matches("date"))
+     }
+     
      
      sffx=stringr::str_c(".",
-                         stringr::str_split(filename,
-                                            pattern = "_")[[1]][2])
+                         stringr::str_split(stringr::str_split(basename(filename),
+                                            pattern = "\\.")[[1]][1],
+                         pattern="_")[[1]][1])
      
      readdata %<>% dplyr::rename_at(dplyr::vars(-c(.data$id)),
                                     ~ stringr::str_c(., sffx))
@@ -44,14 +52,14 @@ read_csv=function(filename,
 #b. Read response data, validate and bind to gdata
 ####
      files_names=c(
-                   "8_CC_qids.csv",
-                    "1_CRS_GenetikaExercise.csv",
-                   "2_DM_GenetikaExercise.csv",
-                   "3_EL_GenetikaExercise.csv",
-                   "4_HRSD_GenetikaExercise.csv",
-                   "5_MHX_GenetikaExercise.csv",
-                   "6_PDS_GenetikaExercise.csv",
-                   "7_PHX_GenetikaExercise.csv"
+                   "CC_qids.csv",
+                    "Enrollment/CRS.csv",
+                   "Enrollment/DM.csv",
+                   "Enrollment/EL.csv",
+                   "Enrollment/HRSD.csv",
+                   "Enrollment/MHX.csv",
+                   "Enrollment/PDS.csv",
+                   "Enrollment/PHX.csv"
      )
      
 #collect dependable data
@@ -76,13 +84,68 @@ read_csv=function(filename,
      }
      
 #collect reponse data, and validate 
-     cc_data=read_csv(filename = files_names[1])
+     # cc_datae=read_csv(filename = files_names[1],
+     #                  filepath="/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Sasha Kugel/Clinical Data/exercise helpers/")
+
+     cc_data=read_csv(filename = "CC.csv",
+                      filepath=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
+                                     "Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/",
+                                     "DataforPatientHistory/DepressionDataNIH/StarD/STAR_DClinicalData/ASCII Files raw data/",
+                                     "Level2/Visits/"),
+                     withDate = TRUE)
+     cc_dataA=read_csv(filename = "CC.csv",
+                      filepath=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
+                                     "Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/",
+                                     "DataforPatientHistory/DepressionDataNIH/StarD/STAR_DClinicalData/ASCII Files raw data/",
+                                     "Level2a/Visits/"),
+                      withDate = TRUE)
+     cc_dataA$stds5.CC=as.character(cc_dataA$stds5.CC)
+     cc_dataA$stds6.CC=as.character(cc_dataA$stds6.CC)
+     
+     cc_data %<>% bind_rows(cc_dataA)
+     
+     cc_data %<>% filter_all(any_vars(!is.na(.) & .!=""))
+     
+     cc_copy=cc_data
+     
+     {
+         #Seeking for gold standard
+         #gs= cc_copy %>% group_by(id) %>% filter(date.CC==max(date.CC)) 
+         gs= cc_copy %>% group_by(id) %>% filter(qcimp_r.CC==max(qcimp_r.CC)) 
+         # cc_data %<>% dplyr::group_by(.data$id) %<>%
+         #     dplyr::summarise(ave_imp=mean(.data$qcimp_r.CC, na.rm = T),
+         #                      max_imp=max(.data$qcimp_r.CC, na.rm = T)) %<>%
+         #     dplyr::ungroup() %<>%
+         #     as.data.frame()
+         
+         #gs %<>% dplyr::mutate(id_name=stringr::str_c("patient_", .data$id)) 
+         #gs %<>% filter(id_name %in% rownames(gdata)) %<>% ungroup
+         
+         gs %<>% dplyr::mutate(response=ifelse(.data$qcimp_r.CC>50, 1,0))
+         #gs %<>% tibble::column_to_rownames("id_name") 
+         #gs %<>% dplyr::select(-.data$id) 
+         
+         gs %<>% select(id, response, starts_with("stmd"))
+         
+         gs %<>% tidyr::gather(key="trtmnt_key", value="code", -id, -response)
+         
+        citalopram_patients=gs %>% filter(code==103) %>% pull(id) %>% unique
+     }
+     
+     
+     cc_data%<>% select(-.data$date.CC)
+     # cc_data %<>% dplyr::group_by(.data$id) %<>%
+     #                dplyr::summarise(ave_imp=mean(.data$qids.percent.improvement.CC, na.rm = T),
+     #                                 max_imp=max(.data$qids.percent.improvement.CC, na.rm = T)) %<>%
+     #                dplyr::ungroup() %<>% 
+     #                as.data.frame()
+     # 
      
      cc_data %<>% dplyr::group_by(.data$id) %<>%
-                    dplyr::summarise(ave_imp=mean(.data$qids.percent.improvement.CC, na.rm = T),
-                                     max_imp=max(.data$qids.percent.improvement.CC, na.rm = T)) %<>%
-                    dplyr::ungroup() %<>% 
-                    as.data.frame()
+         dplyr::summarise(ave_imp=mean(.data$qcimp_r.CC, na.rm = T),
+                          max_imp=max(.data$qcimp_r.CC, na.rm = T)) %<>%
+         dplyr::ungroup() %<>%
+         as.data.frame()
      
                # Validating calculated fields
                # test_cc=read_csv(filename = "8_CC_qids_calculations.csv")
@@ -101,7 +164,8 @@ read_csv=function(filename,
      #1 - responsive patients, QIDS % IMP >50
      #0 - else (unresponsive)
      cc_data %<>% dplyr::mutate(response=ifelse(.data$max_imp>50, 1,0))
-     
+     #cc_data %<>% dplyr::mutate(response=ifelse(.data$max_imp>5, 1,0))
+ break()    
      gdata = dplyr::inner_join(cc_data,
                                gdata,
                                by="id")
@@ -191,8 +255,8 @@ read_csv=function(filename,
      # if not stated otherwise, the non-appplicable value is -2
      negative_features<-names(gdata)[sapply(gdata, function(x) min(x))<0]
      
-     feature_characteristics=read.csv(stringr::str_c("C:/Users/owner/Dropbox/",
-                                                       "Genetika+ExerciseConfidentialFile/",
+     feature_characteristics=read.csv(stringr::str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
+                                                     "Sasha Kugel/Clinical Data/exercise helpers/",
                                                        "features_charatesitics.csv"),
                                       header = T,
                                       stringsAsFactors = F)
@@ -287,6 +351,9 @@ read_csv=function(filename,
 #E. Predict on TRAIN, TEST and report.
 ####
 #A. Partition the data and prep
+     #filter only citalopram patients
+     gdata %<>% filter(id %in% citalopram_patients)
+     
      gdata %<>% dplyr::mutate(id_name=stringr::str_c("patient_", .data$id)) 
      gdata %<>% tibble::column_to_rownames("id_name") 
      gdata %<>% dplyr::select(-.data$id) 
@@ -297,7 +364,7 @@ read_csv=function(filename,
      #Partition the data into to trainining and testing sets, 
      #balanced towards the smaller group
      trainIndex <- caret::createDataPartition(response_vector, 
-                                              p = .8, 
+                                              p = .75, 
                                               list = FALSE, 
                                               times = 1)
      numToBalance=min(table(response_vector[trainIndex]))
@@ -391,10 +458,10 @@ read_csv=function(filename,
      
      bstSparse <- xgboost(data = subgdata.modeling[balancedTrainIndex,],
                           label = response_vector[balancedTrainIndex],
-                          max.depth = 6,
+                          max.depth = 4,
                           eta = 0.1,
                           nthread = 3,
-                          nrounds = 63 , #Why 63? xgb.cv showed several times for it to be best fit
+                          nrounds = 20 , #Why 63? xgb.cv showed several times for it to be best fit
                           scale_pos_weight = x_scale_pos_weight,
                           eval_metric = "error",
                           objective = "binary:logistic")
@@ -413,14 +480,15 @@ read_csv=function(filename,
      
      
 
-
-
-
-
-
-
-
-
+     {
+        #gold standard experts opinion
+         #gs %<>% filter(id %in% citalopram_patients)
+         gs %<>% mutate(is_cit=ifelse(id %in% citalopram_patients, 1, 0))
+         gs %<>% ungroup %>%  select(id, response, is_cit) %>% distinct 
+         
+         print("Experts opinion")
+         print(confusionMatrix(table(gs %>% select(-id))))
+     }
 
 
 
