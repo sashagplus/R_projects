@@ -325,8 +325,10 @@ set.seed(NULL)
   #  cm.test <- ifelse(predicted[test]==dndrt_data$BUP.Responder[test], 100, 0);
     
     accuracies.xgb %<>% bind_rows(data.frame(nn=i,
-                                            train=cm.train$overall["Accuracy"],
-                                            test=cm.test$overall["Accuracy"]))
+                                         train=cm.train$overall["Accuracy"], 
+                                         test=cm.test$overall["Accuracy"],
+                                         test.sensetivity=cm.test$byClass[["Sensitivity"]],
+                                         test.specificity=cm.test$byClass[["Specificity"]]))
     # accuracies.xgb %<>% bind_rows(data.frame(nn=i,
     #                                          train=cm.train$overall["Accuracy"], 
     #                                          test=cm.test))
@@ -335,7 +337,10 @@ set.seed(NULL)
   #prms$accuracy.test[p]=mean(accuracies.xgb$test)
 #}
 
-print(mean(accuracies.xgb$test))
+  print(str_c("mean accuracy:",  mean(accuracies.xgb$test)))
+  print(str_c("mean sensetivity:",  mean(accuracies.xgb$test.sensetivity)))
+  print(str_c("mean specificity:",  mean(accuracies.xgb$test.specificity)))
+  
 
 predictions =bind_cols(dndrt_data_info, predictions)
 

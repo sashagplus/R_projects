@@ -88,9 +88,21 @@ for(i in 1:20)
   # test=c(i)
   
   
-  mylogit <- glm(`BUP Responder` ~ ., data = coloc[train,], family = "binomial")
+  #mylogit <- glm(`BUP Responder` ~ ., data = coloc[train,], family = "binomial")
   
-  predicted=predict(mylogit, newdata = coloc[,-1], type = "response")
+  xgb.model <- xgboost(data = as.matrix(coloc[train,-1]),
+                       label = coloc[train,] %>% pull(`BUP Responder`),
+                       max.depth = 2, #prms$max.depth[p],
+                       eta = 0.2, #prms$eta[p],
+                       nthread = 5, #prms$nthreads[p],
+                       nrounds = 30, #prms$nrounds[p] , #Why 63? xgb.cv showed several times for it to be best fit
+                       eval_metric = "error",
+                       objective = "binary:logistic",
+                       verbose = 0)
+
+  predicted <- predict(xgb.model, as.matrix(coloc[,-1]));
+  
+  #predicted=predict(mylogit, newdata = coloc[,-1], type = "response")
   
   pp=data.frame(predicted)
   colnames(pp)=str_c("prediction_", ncol(predictions))
@@ -99,7 +111,9 @@ for(i in 1:20)
   
   #colnames(predictions)[ncol(predictions)]=str_c("prediction_", ncol(predictions))
   
-  predicted=round(predict(mylogit, newdata = coloc[,-1], type = "response"))
+  #predicted=round(predict(mylogit, newdata = coloc[,-1], type = "response"))
+  predicted=round(predict(xgb.model, newdata = as.matrix(coloc[,-1])))
+  
   
   cm.train <- confusionMatrix(factor(coloc$`BUP Responder`[train]), 
                               factor(predicted[train]))
@@ -116,7 +130,9 @@ for(i in 1:20)
   #                                      test=cm.test))
   accuracies %<>% bind_rows(data.frame(nn=i,
                                        train=cm.train$overall["Accuracy"], 
-                                       test=cm.test$overall["Accuracy"]))
+                                       test=cm.test$overall["Accuracy"],
+                                        test.sensetivity=cm.test$byClass[["Sensitivity"]],
+                                        test.specificity=cm.test$byClass[["Specificity"]]))
 }
 
 predictions =bind_cols(coloc.identifiers, predictions)
@@ -138,7 +154,9 @@ write.csv(predictions, output_filename,
 
 
 
-print(mean(accuracies$test))
+print(str_c("mean accuracy:",  mean(accuracies$test)))
+print(str_c("mean sensetivity:",  mean(accuracies$test.sensetivity)))
+print(str_c("mean specificity:",  mean(accuracies$test.specificity)))
 
 
 

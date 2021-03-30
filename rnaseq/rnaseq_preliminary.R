@@ -112,13 +112,13 @@ mat %<>% mutate(group=ifelse(group=="Responders", 1, 0))
 mat1=mat
 
 
-output_filename_predata=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
-                              "Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/rnaseq/primary_models/",
-                              "20210315_rnaseq_Bup_7d_premodeling_data.csv")
-
-write.csv(mat %>% tibble::rownames_to_column("Line"), output_filename_predata,
-          quote = TRUE,
-          row.names = FALSE)
+# output_filename_predata=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
+#                               "Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/rnaseq/primary_models/",
+#                               "20210315_rnaseq_Bup_7d_premodeling_data.csv")
+# 
+# write.csv(mat %>% tibble::rownames_to_column("Line"), output_filename_predata,
+#           quote = TRUE,
+#           row.names = FALSE)
 
 
 
@@ -135,17 +135,19 @@ write.csv(mat %>% tibble::rownames_to_column("Line"), output_filename_predata,
 # for(p in 21091:nrow(prms))
 # {
 #if(p%%1000==0) print(p)
-
+mat.group=mat$group
+resp_partition = split(sample(which(mat.group==1)),1:4)
+nonresp_partition = split(sample(which(mat.group==0)),1:4)
 accuracies.xgb=data.frame()
 predictions=data.frame(Line=row.names(mat) ,response=mat$group)
 models=list()
 
-for(i in 1:8)
+for(i in 1:4)
 {  
   
   exclude_samples=c(resp_partition[[i]], nonresp_partition[[i]])
   
-  xgb.model <- xgboost(data = as.matrix(mat[-exclude_samples,-1]),
+  xgb.model <- xgboost(data = as.matrix(mat[-exclude_samples,sig_features]),
                        label = mat[-exclude_samples,1],
                        max.depth = 2, #prms$max.depth[p],
                        eta = 0.2, #prms$eta[p],
@@ -154,9 +156,15 @@ for(i in 1:8)
                        eval_metric = "error",
                        objective = "binary:logistic",
                        verbose = 0)
+
+  
+  mylogit <- glm(group ~ ., data = mat[-exclude_samples, c("group",sig_features)], family = "binomial")
   
   #predicted <- predict(xgb.model, as.matrix(mat[,-1]));
-  predicted <- round(predict(xgb.model, as.matrix(mat[,-1])));
+  #predicted <- round(predict(xgb.model, as.matrix(mat[,sig_features])));
+  
+  
+  predicted=round(predict(mylogit, newdata = mat[,sig_features], type = "response"))
   
   pp=data.frame(predicted)
   colnames(pp)=str_c("prediction_", ncol(predictions))
@@ -189,10 +197,53 @@ for(i in 1:8)
 #prms$accuracy.test[p]=mean(accuracies.xgb$test)
 #}
 
+predictions %<>% mutate(sum_pred=rowSums(across(starts_with("prediction_")))) 
+predictions %<>% mutate(pred_using_all=ifelse(sum_pred<=2, 0, 1))
+print(table(predictions$pred_using_all, predictions$response))
+
 print(str_c("mean accuracy:",  mean(accuracies.xgb$test, na.rm = T)))
 print(str_c("mean sensetivity:",  mean(accuracies.xgb$test.sensetivity, na.rm = T)))
 print(str_c("mean specificity:",  mean(accuracies.xgb$test.specificity, na.rm = T)))
 
+
+{#modeling full set + simulated data
+  xgb.model <- xgboost(data = as.matrix(mat[,sig_features]),
+                       label = mat[,1],
+                       max.depth = 2, #prms$max.depth[p],
+                       eta = 0.2, #prms$eta[p],
+                       nthread = 5, #prms$nthreads[p],
+                       nrounds = 30, #prms$nrounds[p] , #Why 63? xgb.cv showed several times for it to be best fit
+                       eval_metric = "error",
+                       objective = "binary:logistic",
+                       verbose = 0)
+  
+  
+  numtosim_1=800
+  numtosim_0=1200
+  smat=bind_rows(data.frame(group=rep(1, numtosim_1)),
+                 data.frame(group=rep(0, numtosim_0)));  
+  
+  for(s in sig_features)
+  {
+    df1=data.frame(runif(numtosim_1, 
+                     min=min(range(mat[which(mat[,1]==1), s]))-2*sd(mat[which(mat[,1]==0), s]), 
+                     max=max(range(mat[which(mat[,1]==1), s]))+2*sd(mat[which(mat[,1]==0), s])))
+    colnames(df1)[1]=s
+    
+    
+    df0=data.frame(runif(numtosim_0, 
+                         min=min(range(mat[which(mat[,1]==0), s]))-2*sd(mat[which(mat[,1]==1), s]), 
+                         max=max(range(mat[which(mat[,1]==0), s]))+2*sd(mat[which(mat[,1]==1), s])))
+    colnames(df0)[1]=s
+    
+    smat %<>% bind_cols(bind_rows(df1, df0))
+  }
+
+  spredicted <- round(predict(xgb.model, as.matrix(smat[,sig_features])));
+  
+  confusionMatrix(factor(smat$group, levels = unique(smat$group)), 
+                  factor(spredicted,levels = unique(smat$group)))
+}
 
 
 #predictions =bind_cols(dndrt_data_info, predictions)
