@@ -73,7 +73,7 @@ write.csv(bind_cols(coloc.identifiers %>% select(FIELD_NO, DF, Line), coloc),
 
 
 
-
+set.seed(1)
 accuracies=data.frame()
 predictions=data.frame(response=coloc$`BUP Responder`)
 #for(i in 1:nrow(coloc))
@@ -92,10 +92,10 @@ for(i in 1:20)
   
   xgb.model <- xgboost(data = as.matrix(coloc[train,-1]),
                        label = coloc[train,] %>% pull(`BUP Responder`),
-                       max.depth = 2, #prms$max.depth[p],
-                       eta = 0.2, #prms$eta[p],
+                       max.depth = 4, #prms$max.depth[p],
+                       eta = 0.1, #prms$eta[p],
                        nthread = 5, #prms$nthreads[p],
-                       nrounds = 30, #prms$nrounds[p] , #Why 63? xgb.cv showed several times for it to be best fit
+                       nrounds = 25, #prms$nrounds[p] , #Why 63? xgb.cv showed several times for it to be best fit
                        eval_metric = "error",
                        objective = "binary:logistic",
                        verbose = 0)

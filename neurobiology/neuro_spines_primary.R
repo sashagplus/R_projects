@@ -270,7 +270,7 @@ write.csv(bind_cols(dndrt_data_info %>% select(-BUP.Responder, -folder.spines, -
 library(xgboost)
 
 #set.seed(0)
-set.seed(NULL)
+set.seed(1)
 # prms=merge(seq(1,10,1), seq(0.1,0.9, 0.1))
 # colnames(prms)=c("max.depth", "eta")
 # prms %<>% full_join(data.frame(nthreads=c(1:10)), by=as.character())

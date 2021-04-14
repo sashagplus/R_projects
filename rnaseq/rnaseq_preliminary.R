@@ -6,7 +6,7 @@ library(tidyr)
 library("rpart")
 library(rpart.plot)
 
-rm(list=)
+rm(list=ls())
 
 data_folder=stringr::str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/01_Protocol_Development/01_06_RNA-seq/Analysis/Analysis full/")
 

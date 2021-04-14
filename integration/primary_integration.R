@@ -58,7 +58,7 @@ coloc %<>% group_by(Line, BUP.Responder) %>% summarise_all(median)
 write.csv(alllines_names, 
           stringr::str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
                           "Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/",
-                          "Integration/Data/data_availability_gplus.csv"),
+                          "Integration/Data/data_availability_gplus_7d_bupropion.csv"),
           quote = TRUE,
           row.names = FALSE)
 break()
