@@ -76,6 +76,8 @@ write.csv(bind_cols(coloc.identifiers %>% select(FIELD_NO, DF, Line), coloc),
 set.seed(1)
 accuracies=data.frame()
 predictions=data.frame(response=coloc$`BUP Responder`)
+tests=data.frame(response=coloc$`BUP Responder`)
+models=list()
 #for(i in 1:nrow(coloc))
 for(i in 1:20)
 { 
@@ -84,6 +86,12 @@ for(i in 1:20)
           sample(which(coloc$`BUP Responder`==1), 57*0.8) )
   test=c(1:nrow(coloc))[-train]
   
+  tt=data.frame(response=coloc$`BUP Responder`)
+  tt$trainORtest=""
+  tt[train,]="train"
+  tt[test,]="test"
+  colnames(tt)[2]=str_c("trainORtest_", i)
+  tests %<>% bind_cols(tt %>% select(-response))
   # train=c(1:nrow(coloc))[-i]
   # test=c(i)
   
@@ -107,8 +115,10 @@ for(i in 1:20)
   pp=data.frame(predicted)
   colnames(pp)=str_c("prediction_", ncol(predictions))
   
-  predictions %<>% bind_cols(pp)
+  models[[str_c("prediction_", ncol(predictions))]]=xgb.model
   
+  predictions %<>% bind_cols(pp)
+ 
   #colnames(predictions)[ncol(predictions)]=str_c("prediction_", ncol(predictions))
   
   #predicted=round(predict(mylogit, newdata = coloc[,-1], type = "response"))
@@ -159,9 +169,120 @@ print(str_c("mean sensetivity:",  mean(accuracies$test.sensetivity)))
 print(str_c("mean specificity:",  mean(accuracies$test.specificity)))
 
 
+#output predictions
+
+pp=predictions %>% select(FIELD_NO, DF, Line, `BUP Responder`, TREATMENT, DAYS, `SN/SR`, response, prediction_6, prediction_16)
+pp %<>% bind_cols(tests %>% select(trainORtest_6, trainORtest_16))
+write.csv(pp, "/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/Exploratory_Outputs/neurobiology_imaging/Coloc/20210426_predictions_coloc_models.csv", row.names = F)
 
 
 
+
+## CIT TEMP!!!
+cit=read_excel_allsheets(str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/04_Differentiation_Experiments/Compiled_Results/Colocalization/20210427_by_field_for_Sasha/20210427_CIT_by_Field.xlsx"))
+#coloc1=read_excel_allsheets(str_c(data_folder, "20210311_Bup_by_Field_DF42to74.xlsx"))
+
+cit=cit$Sheet1
+#coloc1=coloc1$Sheet1
+
+colnames(cit)=str_replace_all(colnames(cit),"'", "")
+#colnames(coloc1)=str_replace_all(colnames(coloc1),"'", "")
+
+#filtering
+cit %<>% filter((TREATMENT %in% c("CIT")) & DAYS==7) 
+cit %<>% group_by(Line, `BUP Responder`) %>% filter(DF==max(DF)) 
+
+cit.identifiers=cit %>% select(FIELD_NO, DF, Line, `BUP Responder`,  TREATMENT, DAYS, `SN/SR` )
+
+cit %<>% ungroup %<>% select(-Line, -FIELD_NO, -DF, -`SN/SR`, -`pix/um`, -TREATMENT, -DAYS)
+#coloc %<>% tibble::column_to_rownames("Line")
+
+
+cit.bupResponder=cit$`BUP Responder`
+cit %<>% rowwise() %<>% mutate(response=ifelse(`BUP Responder`=="NR", 0,1)) %>% relocate(response) %>% select(-`BUP Responder`)
+
+cit %<>% mutate_all(as.numeric)
+
+cit %<>% ungroup()
+cit.identifiers %<>% ungroup()
+
+
+predicted_6 <- data.frame(response=cit$response, prediction_6=predict(models[["prediction_6"]], as.matrix(cit[,-1])))
+predicted_16 <-data.frame(prediction_16=predict(models[["prediction_16"]], as.matrix(cit[,-1])))
+
+cit.predictions =bind_cols(cit.identifiers, predicted_6)
+cit.predictions %<>% bind_cols(predicted_16)
+
+print(confusionMatrix(factor(round(cit.predictions$prediction_6)),
+                      factor(cit.predictions$response), positive = "1"))
+
+print(confusionMatrix(factor(round(cit.predictions$prediction_16)),
+                      factor(cit.predictions$response), positive = "1"))
+
+cit.predictions %<>% mutate(pred6_bin=round(prediction_6))
+cit.predictions %<>% mutate(pred16_bin=round(prediction_16))
+
+borderline=c(10, 32, 27)
+
+
+cit.predictions %<>% mutate(response_borderline=ifelse(Line %in% borderline, 1, response))
+
+print(confusionMatrix(factor(round(cit.predictions$prediction_6)),
+                      factor(cit.predictions$response_borderline), positive = "1"))
+
+print(confusionMatrix(factor(round(cit.predictions$prediction_16)),
+                      factor(cit.predictions$response_borderline), positive = "1"))
+
+
+write.csv(cit.predictions, "/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/Exploratory_Outputs/neurobiology_imaging/Coloc/20210427_predictions_coloc_models_CIT.csv", row.names = F)
+
+
+#NTP
+ntp=read_excel_allsheets(str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/04_Differentiation_Experiments/Compiled_Results/Colocalization/20210427_by_field_for_Sasha/20210427_NTP_by_Field.xlsx"))
+#coloc1=read_excel_allsheets(str_c(data_folder, "20210311_Bup_by_Field_DF42to74.xlsx"))
+
+ntp=ntp$Sheet1
+#coloc1=coloc1$Sheet1
+
+colnames(ntp)=str_replace_all(colnames(ntp),"'", "")
+#colnames(coloc1)=str_replace_all(colnames(coloc1),"'", "")
+
+#filtering
+ntp %<>% filter((TREATMENT %in% c("NTP")) & DAYS==7) 
+ntp %<>% group_by(Line, `BUP Responder`) %>% filter(DF==max(DF)) 
+
+ntp.identifiers=ntp %>% select(FIELD_NO, DF, Line, `BUP Responder`,  TREATMENT, DAYS, `SN/SR` )
+
+ntp %<>% ungroup %<>% select(-Line, -FIELD_NO, -DF, -`SN/SR`, -`pix/um`, -TREATMENT, -DAYS)
+#coloc %<>% tibble::column_to_rownames("Line")
+
+
+ntp.bupResponder=ntp$`BUP Responder`
+ntp %<>% rowwise() %<>% mutate(response=ifelse(`BUP Responder`=="NR", 0,1)) %>% relocate(response) %>% select(-`BUP Responder`)
+
+ntp %<>% mutate_all(as.numeric)
+
+ntp %<>% ungroup()
+ntp.identifiers %<>% ungroup()
+
+
+ntp_predicted_6 <- data.frame(response=ntp$response, prediction_6=predict(models[["prediction_6"]], as.matrix(ntp[,-1])))
+ntp_predicted_16 <-data.frame(prediction_16=predict(models[["prediction_16"]], as.matrix(ntp[,-1])))
+
+ntp.predictions =bind_cols(ntp.identifiers, ntp_predicted_6)
+ntp.predictions %<>% bind_cols(ntp_predicted_16)
+
+print(confusionMatrix(factor(round(ntp.predictions$prediction_6)),
+                      factor(ntp.predictions$response), positive = "1"))
+
+print(confusionMatrix(factor(round(ntp.predictions$prediction_16)),
+                      factor(ntp.predictions$response), positive = "1"))
+
+ntp.predictions %<>% mutate(pred6_bin=round(prediction_6))
+ntp.predictions %<>% mutate(pred16_bin=round(prediction_16))
+
+
+write.csv(ntp.predictions, "/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/Exploratory_Outputs/neurobiology_imaging/Coloc/20210427_predictions_coloc_models_NTP.csv", row.names = F)
 
 
 
