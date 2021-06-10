@@ -4,8 +4,13 @@
 #' Input: none
 #' Output: noneß 
 #' 
-library(RPostgreSQL)
-library(DBI)
+#library(RPostgreSQL)
+#library(DBI)
+library(stringr)
+library(magrittr)
+library(dplyr)
+library(gpio)
+
 rm(list=ls())
 patient_to_sample=read.table(str_c("/Users/sashakugel/gplus_dropbox/",
                                   "Genetika+ Dropbox/Genetika+SharedDrive/",
@@ -22,34 +27,35 @@ patient_to_sample %<>% mutate(GP...CODE.clean=str_remove(GP...CODE, "\\*"))
 
 patient_to_sample %<>% mutate(GP...CODE.numeric=as.numeric(str_remove(GP...CODE.clean, "LCL-")))
 
-db = "postgres"
+# db = "postgres"
+# 
+# host_db = "localhost" #i.e. # i.e. 'ec2-54-83-201-96.compute-1.amazonaws.com'  
+# 
+# db_port <- "5432"  # or any other port specified by the DBA
+# 
+# db_user <- "postgres"  
+# 
+# db_password <- "genetikapostgre";
 
-host_db = "localhost" #i.e. # i.e. 'ec2-54-83-201-96.compute-1.amazonaws.com'  
+# con <- dbConnect(RPostgreSQL::PostgreSQL(),
+#                  dbname = Sys.getenv("db.db"),
+#                  host=Sys.getenv("db.host"),
+#                  port=Sys.getenv("db.port"),
+#                  user=Sys.getenv("db.user"),
+#                  password=Sys.getenv("db.password"))
+# 
 
-db_port <- "5432"  # or any other port specified by the DBA
+cc=gpio::dbConnect("schema_test10")
 
-db_user <- "postgres"  
-
-db_password <- "genetikapostgre";
-
-con <- dbConnect(RPostgreSQL::PostgreSQL(), 
-                 dbname = db, 
-                 host=host_db, 
-                 port=db_port, 
-                 user=db_user, 
-                 password=db_password,
-                 options="-c search_path=gplus_beta")  
-
-
-dbWriteTable(con, "patients_stardID_to_gpId", patient_to_sample)
+xx=dbWriteTable(cc, "patients_stardID_to_gpId", patient_to_sample)
 
 
 #dbRemoveTable(con, "patients_stardID_to_gpId")
 
-tester=dbReadTable(con, "patients_stardID_to_gpId")
+tester=gpio::dbReadTable("patients_stardID_to_gpId")
 
-print(str_c("Are equal? ", all_equal(patient_to_sample, tester)))
+print(stringr::str_c("Are equal? ", all_equal(patient_to_sample, tester)))
 #data frames maybe of different formats
 
 
-dbDisconnect(con) 
+#dbDisconnect(con) 

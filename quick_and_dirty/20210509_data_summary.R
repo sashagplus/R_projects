@@ -1,0 +1,150 @@
+library(stringr)
+library(magrittr)
+library(dplyr)
+library(tidyr)
+library("rpart")
+library(rpart.plot)
+library(readxl)    
+library(caret)
+
+rm(list=ls())
+
+read_excel_allsheets <- function(filename, tibble = FALSE) {
+  # I prefer straight data.frames
+  # but if you like tidyverse tibbles (the default with read_excel)
+  # then just pass tibble = TRUE
+  sheets <- readxl::excel_sheets(filename)
+  x <- lapply(sheets, function(X) readxl::read_excel(filename, sheet = X))
+  if(!tibble) x <- lapply(x, as.data.frame)
+  names(x) <- sheets
+  x
+}
+
+#0. Read stard lines to g+ lines mapping
+#gp = genetikaplus
+patient_to_sample=read.table(str_c("/Users/sashakugel/gplus_dropbox/",
+                                   "Genetika+ Dropbox/Genetika+SharedDrive/",
+                                   "01_Protocol_Development/01_10_Data_Science/",
+                                   "2020_GP_Patient_Codes-StarD.tsv"),
+                             header=TRUE,
+                             stringsAsFactors = F,
+                             sep="\t")
+
+patient_to_sample %<>% mutate(GP...CODE.clean=str_remove(GP...CODE, "\\*"))
+
+patient_to_sample %<>% mutate(GP...CODE.numeric=as.numeric(str_remove(GP...CODE.clean, "LCL-")))
+
+colnames(patient_to_sample) = c("id.stard", "id.ruidCellLine", "id.gpCode.raw", "id.gp", "id.gp.numeric")
+
+#1. Read response data, and summarise
+#Temporarly - reading the file Sari prepared. Later will be the file I curate from Claudia's extraction
+responses=read.csv(str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
+                          "Genetika+SharedDrive/01_Protocol_Development/",
+                          "01_10_Data_Science/20210509_treatment_qids_levels.csv"))
+responses %<>% gather(key="Treat", value = "qids", -Patient.ID, na.rm = T)
+
+responses %<>% mutate(Treat.abbrv=case_when(Treat=="Bupropion" ~ "BUP",
+                                            Treat=="Citalopram..Celexa." ~ "CIT",
+                                            Treat=="Mirtazapine" ~ "MIRT",
+                                            Treat=="Nortriptyline" ~ "NTP",
+                                            Treat=="Sertraline" ~ "STL",
+                                            Treat=="Tranylclypromine" ~ "TCL",
+                                            Treat=="Venlafaxine" ~ "VLF"))
+
+ print(1)                                        
+#2. Read imaging data and summarise
+# line 19 problematic
+imaging_data=read.csv(stringr::str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/04_Differentiation_Experiments/20210505_File_Location_well_index_per_line_including2019Data.csv"))
+
+imaging_data %<>% filter(Line != 19)
+colnames(imaging_data) = c( "DF", "Line", "Well", "Treat", "Days", "BUP.Responder",
+                              "folder.spines", "folder.coloc", 
+                              "file.coloc.roi.xlsx", "file.coloc.psd.csv", 
+                              "file.coloc.syn.csv", "pixel.to.um.ratio")
+
+imaging_data %<>% filter(Days >= 7)
+
+imaging_data.LineTreat=imaging_data %>% select(Line, Treat) %>% distinct() %>% mutate(imaging=1)
+
+imaging_summary_by_Line=imaging_data %>% distinct(Line, Treat, DF) %>% 
+                                        group_by(Line, Treat) %>% summarise(n=n(), .groups = "keep") %>% 
+                                        spread(key=Treat, value=n)
+
+#3. Read rnaseq data and summarise
+rnaseq_data=read.csv(stringr::str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/",
+                                      "Genetika+SharedDrive/01_Protocol_Development/",
+                                      "01_06_RNA-seq/Analysis/raw_data/database/",
+                                      "rnaseq_sample_log_analysis.csv"))
+rnaseq_data %<>% mutate(CellLIne.numeric=as.numeric(str_remove(CellLIne, "L")))
+
+rnaseq_data %<>% mutate(Treatment.abbrv=case_when(Treatment=="bupropion" ~ "BUP",
+                                                  Treatment=="citalopram" ~ "CIT",
+                                                  Treatment=="mirtazapine" ~ "MIRT",
+                                                  Treatment=="nortriptyline" ~ "NTP",
+                                                  Treatment=="vehicle" ~ "VEH"))
+
+rnaseq_data.LineTreat= rnaseq_data %>% select(CellLIne.numeric, Treatment.abbrv) %>% distinct() %>% mutate(rnaseq=1)
+#Line 32 and 43 have only 3d vehicle, and 7 day treatment
+
+rnaseq_summary_by_Line=rnaseq_data %>% distinct(CellLIne.numeric, Treatment, Differentiation) %>% 
+                                        group_by(CellLIne.numeric, Treatment) %>% 
+                                        summarise(n=n(), .groups = "keep") %>% 
+                                        spread(key=Treatment, value=n) 
+
+
+#4. Cross all data
+patient_to_sample %<>%  select(id.stard, id.gp.numeric) %<>%
+                        left_join(responses, by=c("id.stard"="Patient.ID"))
+
+#patient_to_sample %<>% mutate(rnaseq=ifelse(id.gp.numeric %in% rnaseq_data$CellLIne.numeric, TRUE, FALSE))
+#patient_to_sample %<>% left_join()
+#patient_to_sample %<>% mutate(imaging=ifelse(id.gp.numeric %in% imaging_data$Line, TRUE, FALSE))
+
+patient_to_sample %<>% mutate(responsivness=ifelse(qids >=50, "R", "NR"))
+patient_to_sample %<>% mutate(borderline=ifelse(responsivness=="NR" & qids >=40, TRUE, FALSE))
+
+patient_to_sample %<>% left_join(rnaseq_data.LineTreat, by=c("id.gp.numeric"="CellLIne.numeric", "Treat.abbrv"="Treatment.abbrv"))
+
+patient_to_sample %<>% left_join(imaging_data.LineTreat, by=c("id.gp.numeric"="Line", "Treat.abbrv"="Treat"))
+
+patient_to_sample %<>% rowwise() %>% mutate(gp=sum(rnaseq, imaging, na.rm=T)) %>% filter(gp!=0) 
+
+print(1)
+pts=patient_to_sample %>% select(id.gp.numeric, Treat.abbrv, qids, responsivness, rnaseq, imaging) %>% distinct() %>% spread(key=Treat.abbrv, value=qids)
+
+
+#pts %>% group_by(BUP, CIT, MIRT, NTP) %>% summarise_all(sum, na.rm=T)
+pts %<>% gather(key="analysis", value="val", -id.gp.numeric, -responsivness, -BUP, -CIT, -MIRT, -NTP) 
+
+
+ds=pts %>% mutate_at(vars(BUP, CIT, MIRT, NTP), ~ ifelse(is.na(.x), 0, val)) %>% group_by(analysis, responsivness) %>% summarise_all(sum, na.rm=T)
+
+ds %<>% select(-val, -id.gp.numeric) %<>% ungroup()
+
+print(ds)
+
+
+flextable::flextable(ds) %>% 
+  flextable::merge_v(~analysis) %>% 
+  flextable::theme_box() %>% 
+  flextable::set_header_labels(analysis  = "Analysis Type",
+                               responsivness = " R / NR") %>%
+  flextable::autofit() %>%
+  flextable::align(align = "center") %>% 
+  print
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
