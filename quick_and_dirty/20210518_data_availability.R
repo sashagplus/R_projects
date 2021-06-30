@@ -143,7 +143,9 @@ data_avaialble_response %<>% dplyr::mutate(total=rowSums(dplyr::select(., both, 
 
 treatment.sum=data_avaialble_response %>% dplyr::group_by(Treat.abbrv) %>% 
                                           dplyr::summarise_at(.vars=dplyr::vars(both, imaging, rnaseq, total), ~sum(.x, na.rm=T)) %>% 
-                                          dplyr::ungroup()
+                                          dplyr::ungroup() %>%
+                                         dplyr::mutate(imaging=imaging+both ,
+                                                        rnaseq=rnaseq+both)
 
 #data_avaialble_response %<>% dplyr::select(-rnaseq_oldXXXimaging_old,  -rnaseq_oldXXX, -XXXimaging_old)
 
@@ -216,7 +218,9 @@ alldata=treatment.sum %>% dplyr::mutate(both_str=as.character(both),imaging_str=
 print(2)
 alldata %<>% dplyr::arrange(Treatment, 
                      match(Response, c("NONRESP", "RESP", "Total"))) %>%
-              dplyr::relocate(total, .after = dplyr::last_col())
+              dplyr::relocate(total, .after = dplyr::last_col()) %>%
+              dplyr::mutate_at(vars(both_str, imaging_str, rnaseq_str, total),
+                               ~ifelse(.x=="0", "0", .x))
 
 
 ft_response=
@@ -224,7 +228,7 @@ ft_response=
   #  merge_v(~Treatment) %>%
   set_header_labels(Treatment="Treatment", 
                     Response="Response Label", 
-                    both_str="congruent", 
+                    both_str="Congruent", 
                     rnaseq_str="RNASeq",  
                     imaging_str="Imaging",
                     total="Total") %>%
@@ -236,9 +240,13 @@ ft_response=
   align( i = NULL, j = 2, align = "left", part="body") %>% 
   vline(j = c(2), border = officer::fp_border(color="black", width = 1), part="all") %>%
   hline(i=c(3,6,9,12), border=officer::fp_border(color="lightgrey", width = 1, style="solid")) %>% 
-  hline(i=c(2,5,8,13), j=c(2:6), border=officer::fp_border(color="lightgrey", width = 1, style="dashed")) %>% 
+  hline(i=c(2,5,8,11,13), j=c(2:6), border=officer::fp_border(color="lightgrey", width = 1, style="dashed")) %>% 
   bold(  j = c(6), bold = TRUE, part = "all") %>% 
-  color(i = c(3,6,9,12), j = c(3), color="grey", part = "body", source = j) %>%
+  color(i = c(3,6,9,12), j = ~both_str, color="grey", part = "body", source = j) %>%
+  bold( i = c(3,6,9,12), j = ~both_str, bold = TRUE, part = "body") %>% 
+  color(i =~ both_str=="0", j = ~both_str, color="gray96", part = "body", source = j) %>%
+  color(i =~ rnaseq_str=="0", j = ~rnaseq_str, color="gray96", part = "body", source = j) %>%
+  color(i =~ imaging_str=="0", j = ~imaging_str, color="gray96", part = "body", source = j) %>%
   autofit( add_w = 0.1, add_h = 0.1, part = c("body", "header")) %>%
   merge_v(~Treatment) %>%
   fix_border_issues()
