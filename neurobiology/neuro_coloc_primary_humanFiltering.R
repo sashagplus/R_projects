@@ -22,10 +22,10 @@ read_excel_allsheets <- function(filename, tibble = FALSE) {
 
 data_folder=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
                   "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/",
-                  "04_Differentiation_Experiments/Compiled_Results/Colocalization/20210311_Bup_by_Field_for_Sasha/")
+                  "04_Differentiation_Experiments/Compiled_Results/Colocalization/20210427_by_field_for_Sasha/")
 
 
-coloc=read_excel_allsheets(str_c(data_folder, "20210311_Bup_by_Field_DF42to74.xlsx"))
+coloc=read_excel_allsheets(str_c(data_folder, "20210428_BUP_CIT_NTP_by_Field.xlsx"))
 #coloc1=read_excel_allsheets(str_c(data_folder, "20210311_Bup_by_Field_DF42to74.xlsx"))
 
 coloc=coloc$Sheet1
@@ -34,9 +34,26 @@ coloc=coloc$Sheet1
 colnames(coloc)=str_replace_all(colnames(coloc),"'", "")
 #colnames(coloc1)=str_replace_all(colnames(coloc1),"'", "")
 
+coloc %<>% mutate(TREATMENT=str_replace_all(TREATMENT, "'", "")) %<>%
+          mutate(TREATMENT=ifelse(TREATMENT=="CIT_7D", "CIT", TREATMENT)) %<>%
+          mutate(TREATMENT=ifelse(TREATMENT=="MIRT_7D", "MIRT", TREATMENT))
+
+
 #filtering
-coloc %<>% filter(TREATMENT=="BUP" & DAYS==7) 
-coloc %<>% group_by(Line, `BUP Responder`) %>% filter(DF==max(DF)) 
+#coloc %<>% filter(! TREATMENT %in% c("MIRT", "VEH", "NTP"))
+coloc %<>% filter(! TREATMENT %in% c( "VEH", "MIRT"))
+#coloc %<>% filter(TREATMENT=="BUP" & DAYS==7) 
+coloc %<>% group_by(Line, `BUP Responder`) %>% filter(DF==max(DF)) %<>% ungroup()
+
+set.seed(1)
+
+
+# train <- caret::createDataPartition(as.matrix(coloc %>%  group_by(TREATMENT, `BUP Responder`) %>% mutate(group_ind=group_indices()) %>% pull(group_ind)), 
+#                                          p = .80, 
+#                                          list = FALSE, 
+#                                          times = 1)
+# test=c(1:nrow(coloc))[-train]
+
 
 coloc.identifiers=coloc %>% select(FIELD_NO, DF, Line, `BUP Responder`,  TREATMENT, DAYS, `SN/SR` )
 #coloc %<>% filter(`SN/SR`=="SN")
@@ -51,58 +68,60 @@ coloc %<>% mutate(`BUP Responder`=ifelse(`BUP Responder`=="NR", 0,1))
 coloc %<>% mutate_all(as.numeric)
 #coloc = lapply(coloc, is.numeric)
 
-ttests=coloc %>%
-  summarise_each(funs(t.test(.[`BUP Responder` == 0], .[`BUP Responder` == 1])$p.value), vars = -'BUP Responder')
-
-ttests=as.data.frame(t(ttests))
+# ttests=coloc %>%
+#   summarise_each(funs(t.test(.[`BUP Responder` == 0], .[`BUP Responder` == 1])$p.value), vars = -'BUP Responder')
+# 
+# ttests=as.data.frame(t(ttests))
 #ttests %<>% tibble::rownames_to_column("ensembleID")
 #colnames(ttests)[2]="pval"
+
+
 
 coloc %<>% ungroup()
 coloc.identifiers %<>% ungroup()
 
-output_filename_predata=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
-                              "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
-                              "04_Differentiation_Experiments/Data Science/Colocolization_modeling/",
-                              "20210315_coloc_Bup_7d_maxDF_premodeling_data.csv")
+# output_filename_predata=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
+#                               "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
+#                               "04_Differentiation_Experiments/Data Science/Colocolization_modeling/",
+#                               "20210427_coloc_Bup_CIT_NTP_maxDF_premodeling_data.csv")
+# 
+# write.csv(bind_cols(coloc.identifiers %>% select(FIELD_NO, DF, Line), coloc), 
+#           output_filename_predata,
+#           quote = TRUE,
+#           row.names = FALSE)
 
-write.csv(bind_cols(coloc.identifiers %>% select(FIELD_NO, DF, Line), coloc), 
-          output_filename_predata,
-          quote = TRUE,
-          row.names = FALSE)
 
 
 
-set.seed(1)
 accuracies=data.frame()
 predictions=data.frame(response=coloc$`BUP Responder`)
 tests=data.frame(response=coloc$`BUP Responder`)
 models=list()
+predictions_perTreatment=data.frame()
 #for(i in 1:nrow(coloc))
 for(i in 1:20)
 { 
   print(i)
-  train=c(sample(which(coloc$`BUP Responder`==0), 74*0.8) ,
-          sample(which(coloc$`BUP Responder`==1), 57*0.8) )
+  train <- caret::createDataPartition(as.matrix(coloc.identifiers %>%  group_by(TREATMENT, `BUP Responder`) %>% mutate(group_ind=group_indices()) %>% pull(group_ind)), 
+                                      p = .80, 
+                                      list = FALSE, 
+                                      times = 1)
   test=c(1:nrow(coloc))[-train]
   
+  #keep the train/test partitioning
   tt=data.frame(response=coloc$`BUP Responder`)
   tt$trainORtest=""
   tt[train,]="train"
   tt[test,]="test"
-  colnames(tt)[2]=str_c("trainORtest_", i)
-  tests %<>% bind_cols(tt %>% select(-response))
-  # train=c(1:nrow(coloc))[-i]
-  # test=c(i)
+  colnames(tt)[2]="trainORtest"
   
   
-  #mylogit <- glm(`BUP Responder` ~ ., data = coloc[train,], family = "binomial")
-  
+  #Model
   xgb.model <- xgboost(data = as.matrix(coloc[train,-1]),
                        label = coloc[train,] %>% pull(`BUP Responder`),
                        max.depth = 4, #prms$max.depth[p],
                        eta = 0.1, #prms$eta[p],
-                       nthread = 5, #prms$nthreads[p],
+                       nthread= 5, #prms$nthreads[p],
                        nrounds = 25, #prms$nrounds[p] , #Why 63? xgb.cv showed several times for it to be best fit
                        eval_metric = "error",
                        objective = "binary:logistic",
@@ -110,88 +129,118 @@ for(i in 1:20)
 
   predicted <- predict(xgb.model, as.matrix(coloc[,-1]));
   
-  #predicted=predict(mylogit, newdata = coloc[,-1], type = "response")
   
-  pp=data.frame(predicted)
-  colnames(pp)=str_c("prediction_", ncol(predictions))
+  #Predict
+  pp=data.frame(predicted_probability=predicted)
+  pp %<>% mutate(predicted_class=ifelse(round(predicted_probability)==1, "R", "NR"))
+  
+  #recording predictions per treatment
+  predictions_perTreatment %<>% bind_rows(bind_cols(coloc.identifiers %>% select(TREATMENT, `BUP Responder`), 
+                                                    pp %>% select(predicted_class),
+                                                    tt %>% select(-1)) %>%
+                                            ftable() %>% 
+                                            as.data.frame() %>% ungroup() %>%
+                                            mutate(temp=str_c(trainORtest, "_", predicted_class), .keep = c( "unused")) %>% 
+                                            spread(key=temp, value=Freq) %>% 
+                                            mutate(model=i, .before=c("TREATMENT"))
+  )
+  
+  
+  
+  pp %<>% rename_all(~ str_c(.x, "_", i))
+  tt %<>% rename_all(~ str_c(.x, "_", i))
   
   models[[str_c("prediction_", ncol(predictions))]]=xgb.model
   
-  predictions %<>% bind_cols(pp)
+  predictions %<>% bind_cols(pp, tt %>% select(-1))
  
-  #colnames(predictions)[ncol(predictions)]=str_c("prediction_", ncol(predictions))
-  
-  #predicted=round(predict(mylogit, newdata = coloc[,-1], type = "response"))
   predicted=round(predict(xgb.model, newdata = as.matrix(coloc[,-1])))
   
   
+  #recording model performance
   cm.train <- confusionMatrix(factor(coloc$`BUP Responder`[train]), 
                               factor(predicted[train]))
-  #print("Train")
-  #print(cm.train$overall)
-  
-  #cm.test <- ifelse(predicted[test]==coloc$`BUP Responder`[test], 100, 0);
   
   cm.test <- confusionMatrix(factor(coloc$`BUP Responder`[test]),
                              factor(predicted[test]))
   
-  # accuracies %<>% bind_rows(data.frame(nn=i,
-  #                                      train=cm.train$overall["Accuracy"], 
-  #                                      test=cm.test))
-  accuracies %<>% bind_rows(data.frame(nn=i,
-                                       train=cm.train$overall["Accuracy"], 
-                                       test=cm.test$overall["Accuracy"],
+  accuracies %<>% bind_rows(bind_cols( data.frame(nn=i,
+                                       train.accuracy=cm.train$overall["Accuracy"], 
+                                       test.accuracy=cm.test$overall["Accuracy"],
                                         test.sensetivity=cm.test$byClass[["Sensitivity"]],
-                                        test.specificity=cm.test$byClass[["Specificity"]]))
+                                        test.specificity=cm.test$byClass[["Specificity"]]),
+                                      as.data.frame(cm.train$table) %>% 
+                                        mutate_at(.vars=vars(c("Prediction", "Reference")), ~as.character(ifelse(.x==1, "R", "NR"))) %>% 
+                                        mutate(temp=str_c("prediction", Prediction, "_", "actual",Reference), .keep=c("unused")) %>% 
+                                        spread(key=temp, value=Freq) %>% 
+                                        rename_all(~ str_c("train_", .x)),
+                                      as.data.frame(cm.test$table) %>% 
+                                        mutate_at(.vars=vars(c("Prediction", "Reference")), ~as.character(ifelse(.x==1, "R", "NR"))) %>% 
+                                        mutate(temp=str_c("prediction", Prediction, "_", "actual",Reference), .keep=c("unused")) %>% 
+                                        spread(key=temp, value=Freq) %>% 
+                                        rename_all(~ str_c("test_", .x))
+                                      )
+  )
 }
 
 predictions =bind_cols(coloc.identifiers, predictions)
 
-predictions %<>% group_by_at(vars(!starts_with("prediction_"))) %>% 
-                rowwise() %>%
-                 mutate(mean_prediction=mean(c_across( starts_with("prediction_"))))
+# predictions %<>% group_by_at(vars(!starts_with("prediction_"))) %>% 
+#                 rowwise() %>%
+#                  mutate(mean_prediction=mean(c_across( starts_with("prediction_"))))
 
 
 
-output_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
+predictions_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
                       "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
                       "04_Differentiation_Experiments/Data Science/Colocolization_modeling/",
-                      "20210314_coloc_Bup_7d_maxDF_modeling_predictions.csv")
+                      "20210428_coloc_Bup_CIT_NTP_7d_maxDF_modeling_predictions_RvsNR.csv")
 
-write.csv(predictions, output_filename,
+write.csv(predictions, predictions_filename,
+          quote = TRUE,
+          row.names = FALSE)
+
+accuracies_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
+                      "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
+                      "04_Differentiation_Experiments/Data Science/Colocolization_modeling/",
+                      "20210428_coloc_Bup_CIT_NTP_7d_maxDF_modelSummary.csv")
+
+write.csv(accuracies, accuracies_filename,
+          quote = TRUE,
+          row.names = FALSE)
+
+predictions_perTreatment_filename=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/",
+                          "01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/", 
+                          "04_Differentiation_Experiments/Data Science/Colocolization_modeling/",
+                          "20210428_coloc_Bup_CIT_NTP_7d_maxDF_predictions_perTreatment.csv")
+
+write.csv(predictions_perTreatment, predictions_perTreatment_filename,
           quote = TRUE,
           row.names = FALSE)
 
 
-
-print(str_c("mean accuracy:",  mean(accuracies$test)))
+print(str_c("mean accuracy:",  mean(accuracies$test.accuracy)))
 print(str_c("mean sensetivity:",  mean(accuracies$test.sensetivity)))
 print(str_c("mean specificity:",  mean(accuracies$test.specificity)))
 
 
-#output predictions
+#model 8 and model 18
 
-pp=predictions %>% select(FIELD_NO, DF, Line, `BUP Responder`, TREATMENT, DAYS, `SN/SR`, response, prediction_6, prediction_16)
-pp %<>% bind_cols(tests %>% select(trainORtest_6, trainORtest_16))
-write.csv(pp, "/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/Exploratory_Outputs/neurobiology_imaging/Coloc/20210426_predictions_coloc_models.csv", row.names = F)
+print(confusionMatrix(factor(round(predictions %>% filter(trainORtest_8=="test") %>% pull(predicted_probability_8))),
+                      factor(predictions %>% filter(trainORtest_8=="test") %>% pull(response)),
+                             positive = "1"))
 
 
 
+
+
+
+
+
+break()
 
 ## CIT TEMP!!!
-cit=read_excel_allsheets(str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/01_Protocol_Development/01_05_Imaging/01_Experiments_and_Results/04_Differentiation_Experiments/Compiled_Results/Colocalization/20210427_by_field_for_Sasha/20210427_CIT_by_Field.xlsx"))
-#coloc1=read_excel_allsheets(str_c(data_folder, "20210311_Bup_by_Field_DF42to74.xlsx"))
-
-cit=cit$Sheet1
-#coloc1=coloc1$Sheet1
-
-colnames(cit)=str_replace_all(colnames(cit),"'", "")
-#colnames(coloc1)=str_replace_all(colnames(coloc1),"'", "")
-
-#filtering
-cit %<>% filter((TREATMENT %in% c("CIT")) & DAYS==7) 
-cit %<>% group_by(Line, `BUP Responder`) %>% filter(DF==max(DF)) 
-
+cit=coloc[which(coloc.identifiers$TREATMENT=="VEH", )]
 cit.identifiers=cit %>% select(FIELD_NO, DF, Line, `BUP Responder`,  TREATMENT, DAYS, `SN/SR` )
 
 cit %<>% ungroup %<>% select(-Line, -FIELD_NO, -DF, -`SN/SR`, -`pix/um`, -TREATMENT, -DAYS)

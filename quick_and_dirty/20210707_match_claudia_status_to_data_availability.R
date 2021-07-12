@@ -108,10 +108,6 @@ imaging_data %<>% dplyr::mutate(date_added=as.Date(as.character(date_added), "%Y
 
 imaging_data.LineTreat=imaging_data %>% select(Line, Treat, isNew) %>% distinct() %>% mutate(imaging=1)
 
-imaging_data.LineTreat %<>% group_by(Line, Treat, imaging) %>% 
-  summarise(isNew=str_c(sort(isNew), collapse=";"), .groups = "keep") %>% 
-  mutate(isNew=ifelse(isNew=="FALSE;TRUE", "TRUE", isNew)) 
-
 #imaging_data.LineTreat %<>% filter(Treat!="VEH") %>% left_join(patient_to_sample %>% select(id.stard, id.gp.numeric), by=c("Line"="id.gp.numeric")) 
 
 
@@ -130,6 +126,26 @@ pts %<>% left_join(responsSelected, by=c("id.stard"="Patient.ID", "Treat.abbrv")
 
 pts %<>% filter(!is.na(rnaseq) | !is.na(imaging))
 
+pts %<>% select(id.stard, id.gp.numeric, Treat.abbrv, rnaseq, imaging, response_imp50p) %>% mutate(Treat.abbrv=tolower(Treat.abbrv)) 
+
+claud=gpio::read_excel_allsheets("/Users/sashakugel/gplus_dropbox/Genetika+ Dropbox/Genetika+SharedDrive/01_Protocol_Development/01_10_Data_Science/2021_05_31_Table of analysed lines_Claudia.xlsx")$Data;
+
+drug_abbrvs=data.frame(drug_name=c("Bupropion", "Citalopram (Celexa)", "Mirtazapine", "Nortriptyline", "Sertraline", "Tranylclypromine", "Venlafaxine"),
+                       drug_abbrv=c("bup", "cit", "mirt", "ntp", "sert", "trp", "ven"))
+
+status=claud[3:nrow(claud), 1:13];
+colnames(status)=claud[2,1:13];
+status %<>% gather(key="analysis", value="st", -Line) %>%
+  filter(!is.na(st)) %>%
+  mutate(gp_id=as.numeric(str_replace(str_replace(Line, "\\*", ""), "LCL-", ""))) %>%
+  mutate(treatment=str_replace(str_replace(analysis, "rna_", ""), "img_", "")) %>%
+  mutate(analysis_type=str_replace(str_replace(analysis, treatment, ""), "_", "")) ;
+
+status %<>% select(-Line, -analysis) %>% spread(key=analysis_type, value=st, fill="")
+
+status %<>% reaname(img.status=img, rna.status=rna)
+
+break;
 #!!!TEMP
 #pts[16:21, "rnaseq_oon"]="rnaseq_new"; pts[18:22, "imaging_oon"]="imaging_new"
 
@@ -227,7 +243,6 @@ alldata %<>% dplyr::arrange(Treatment,
                                ~ifelse(.x=="0", "0", .x))
 
 
-alldata %<>% relocate(rnaseq_str, .after = both_str)
 ft_response=
   flextable::flextable(alldata ) %>% 
   #  merge_v(~Treatment) %>%
@@ -241,7 +256,6 @@ ft_response=
   add_header_row(values=c("","","Response"), colwidths = c(1, 1,4)) %>%
   border_outer(part="all", border = officer::fp_border(color="red", width = 2) ) %>%
   add_header_row(values=c("Genetika+ Data Availability"), colwidths = c(6)) %>%
-  fontsize(i=1, size = 15, part = "header") %>%
   align( i = NULL, j = NULL, align = "center", part="all") %>% 
   align( i = NULL, j = 2, align = "left", part="body") %>% 
   vline(j = c(2), border = officer::fp_border(color="black", width = 1), part="all") %>%
@@ -255,7 +269,6 @@ ft_response=
   color(i =~ imaging_str=="0", j = ~imaging_str, color="gray96", part = "body", source = j) %>%
   autofit( add_w = 0.1, add_h = 0.1, part = c("body", "header")) %>%
   merge_v(~Treatment) %>%
-  width(j=1, width=0.5) %>% 
   fix_border_issues()
 
 

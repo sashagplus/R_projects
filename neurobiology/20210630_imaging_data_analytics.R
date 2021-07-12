@@ -16,7 +16,8 @@ responses %<>% mutate(treat.abbrv=case_when(treatment_single_drug=="Bupropion" ~
                                             treatment_single_drug=="Nortriptyline" ~ "NTP",
                                             treatment_single_drug=="Sertraline" ~ "STL",
                                             treatment_single_drug=="Tranylclypromine" ~ "TCL",
-                                            treatment_single_drug=="Venlafaxine" ~ "VN"))
+                                            treatment_single_drug=="Venlafaxine" ~ "VN")) %<>%
+                mutate(response_imp50p=ifelse(response_imp50p=="RESP", "R", "NR"))
 
 #################### PSD ####################
 psd=gpio::dbGetQuery("select * from pgp.imaging_psd_processed_sevendays")
@@ -37,17 +38,29 @@ plines=psd %>% select(df, line, treatment) %>% distinct %>% left_join(responses 
 psd.grp=psd %>% select(-study_design_id, -file_id, -well, -field, -imagenumber, -objectnumber) %>%
   group_by(df, line, treatment) %>% 
   summarise_all(~median(.x, na.rm = T)) 
+break()
+#NORMALIZE towrds VEH
+psd.grp.norm=psd.grp %>% gather(key=feature, value=value, -df, -line, -treatment) %>% 
+                          spread(key=treatment, value=value) %>% 
+                          mutate_at(vars("BUP","CIT","MIRT","NTP","VEH" ), ~ .x/VEH) %>% 
+                          select(-VEH) %>% 
+                          gather(key="treatment", value="value", -df, -line, -feature) %>% 
+                          filter(!is.na(value)) %>% 
+                          spread(key=feature, value=value) 
 
 psd.grp %<>% left_join(plines, by=c("df", "line", "treatment")) %>%
               relocate(response_imp50p, .after=treatment)
-  
+
+psd.grp %<>% mutate(trt_w_resp=ifelse(treatment=="VEH", treatment, str_c(treatment, "_", response_imp50p))) %<>% 
+  relocate(trt_w_resp, .after=response_imp50p)
+
 pallete.psd.line=palette36.colors(n = length(unique(psd.grp$line)))
 
 #to choose the colors play with the following: 
 #pallete.psd.treatment <- createPalette(length(unique(psd.grp$treatment)), c("#010101", "#ff0000"), M=50); swatch(pallete.psd.treatment)
 
 pallete.psd.treatment <- c("#89657C", "#F16965", "#4DE868", "#5551EB", "#E14DE2")
-
+pallete.psd.trt_w_resp=c("#949589", "#DE427A", "#D742F6", "#7AFA69", "#62B0F1", "#C57D1C", "#EBA3EA", "#E6E05F", "#26B278" )
 #pallete.psd.treatment=sky.colors(n = length(unique(psd.grp$treatment)))
 
 psd.grp %<>% group_by(line) %>% 
@@ -56,6 +69,10 @@ psd.grp %<>% group_by(line) %>%
 
 psd.grp %<>% group_by(treatment) %>% 
   mutate(color.treatment=pallete.psd.treatment[cur_group_id()]) %>% 
+  ungroup()
+
+psd.grp %<>% group_by(trt_w_resp) %>% 
+  mutate(color.trt_w_resp=pallete.psd.trt_w_resp[cur_group_id()]) %>% 
   ungroup()
 
 psd.grp %<>% arrange(line, df, treatment)
@@ -92,7 +109,8 @@ pca_and_plotgg=function(mat,
     mat=indcs %>% left_join(mat, by=c("df", "line")) %>% filter(treatment %in% treatment_filter)
   }
   
-  identifier_features=c("line", "df","treatment", "color.line", "color.treatment", "label", "response_imp50p")
+  identifier_features=c("line", "df","treatment", "color.line", "color.treatment", "color.trt_w_resp",
+                        "label", "response_imp50p", "trt_w_resp")
   
   mat.pca=bind_cols(mat %>% select(any_of(identifier_features)), 
                     as.data.frame(prcomp(mat %>% select(-any_of(identifier_features)))$x))

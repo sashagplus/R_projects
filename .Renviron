@@ -1,0 +1,13 @@
+
+
+db.db="postgres"
+
+db.host="localhost"
+
+db.port="5432"
+
+db.user="postgres"  
+
+db.password="genetikapostgre";
+
+schema.gplus_data='gplus_beta'

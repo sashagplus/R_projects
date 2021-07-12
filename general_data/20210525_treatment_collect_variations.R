@@ -120,7 +120,7 @@ alllevels %<>% group_by(Patient.ID, Treatment.level, treatment_string) %>% mutat
 #In patients selected by GP, single drug treatments didn't have more then 2 recorded drugs per level.
 #alllevels %>% group_by(Patient.ID, Treatment.level) %>% summarise(meds=n_distinct(Study.med.code.1)) %>% View
 
-#Filter last week
+#Filter last week  !!! ADD THAT IF THE WEEK>IN>LEVEL IS A SINGLE ROW, TAKE IT
 alllevels %<>% filter(Week.in.level != 0) %>% filter((!Week.in.level %in% c(0.1, 2)) | max_week==Week.in.level) 
 #alllevels %<>% select(-max_week)
 

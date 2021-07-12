@@ -34,16 +34,16 @@ norm_info=gpio::dbGetQuery(norm_sql)
 psd %<>% left_join(study_design %>% select(id, coloc_um_to_pixel_ratio), 
                    by=c("study_design_id"="id")) %>% 
           mutate_at(vars(norm_info %>% filter(action=="divide by ration") %>% pull(database_colnames_psd)), 
-                    ~.x/coloc_um_to_pixel_ratio) %>% 
+                    ~.x*coloc_um_to_pixel_ratio) %>% 
           mutate_at(vars(norm_info %>% filter(action=="divide by ration square") %>% pull(database_colnames_psd)), 
-                    ~.x/(coloc_um_to_pixel_ratio^2)) 
+                    ~.x*(coloc_um_to_pixel_ratio^2)) 
 
 syn %<>% left_join(study_design %>% select(id, coloc_um_to_pixel_ratio), 
                    by=c("study_design_id"="id")) %>% 
           mutate_at(vars(norm_info %>% filter(action=="divide by ration") %>% pull(database_colnames_syn)), 
-                    ~.x/coloc_um_to_pixel_ratio) %>% 
+                    ~.x*coloc_um_to_pixel_ratio) %>% 
           mutate_at(vars(norm_info %>% filter(action=="divide by ration square") %>% pull(database_colnames_syn)), 
-                    ~.x/(coloc_um_to_pixel_ratio^2)) 
+                    ~.x*(coloc_um_to_pixel_ratio^2)) 
 
 spines=gpio::dbGetQuery("select * from gpd.imaging_spines")
 #dnd_planar_angle, dnd_max_angle, spn_contact_area_squaremicrom - should be numeric

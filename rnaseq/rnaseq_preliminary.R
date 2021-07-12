@@ -95,8 +95,10 @@ output_filename_processed=str_c("/Users/sashakugel/gplus_dropbox/Genetika+ Dropb
                               "20210315_rnaseq_Bup_7d_processed.Rdata")
 
  save(mat, file=output_filename_processed)
-break()
-#load(output_filename_processed)
+
+ 
+ set.seed(0)
+load(output_filename_processed)
 
 #break()
  
@@ -136,13 +138,13 @@ mat1=mat
 # {
 #if(p%%1000==0) print(p)
 mat.group=mat$group
-resp_partition = split(sample(which(mat.group==1)),1:4)
-nonresp_partition = split(sample(which(mat.group==0)),1:4)
+#resp_partition = split(sample(which(mat.group==1)),1:4)
+#nonresp_partition = split(sample(which(mat.group==0)),1:4)
 accuracies.xgb=data.frame()
 predictions=data.frame(Line=row.names(mat) ,response=mat$group)
 models=list()
 
-for(i in 1:4)
+for(i in 1:8)
 {  
   
   exclude_samples=c(resp_partition[[i]], nonresp_partition[[i]])
@@ -158,13 +160,13 @@ for(i in 1:4)
                        verbose = 0)
 
   
-  mylogit <- glm(group ~ ., data = mat[-exclude_samples, c("group",sig_features)], family = "binomial")
+  #mylogit <- glm(group ~ ., data = mat[-exclude_samples, c("group",sig_features)], family = "binomial")
   
   #predicted <- predict(xgb.model, as.matrix(mat[,-1]));
-  #predicted <- round(predict(xgb.model, as.matrix(mat[,sig_features])));
+  predicted <- round(predict(xgb.model, as.matrix(mat[,sig_features])));
   
   
-  predicted=round(predict(mylogit, newdata = mat[,sig_features], type = "response"))
+  #predicted=round(predict(mylogit, newdata = mat[,sig_features], type = "response"))
   
   pp=data.frame(predicted)
   colnames(pp)=str_c("prediction_", ncol(predictions))
